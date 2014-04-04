@@ -9,11 +9,19 @@ package flashwavrecorder {
   import flash.utils.ByteArray;
   import flash.utils.Dictionary;
   import flash.utils.Endian;
+  //import com.jac.ogg.adobe.audio.format.events.WAVWriterEvent;
+  import com.jac.ogg.events.OggManagerEvent;
+  //import com.jac.ogg.OggComments;
+  //import com.jac.ogg.OggLibVersionInfo;
+  import com.jac.ogg.OggManager;
+  import com.demonsters.debugger.MonsterDebugger;
 
   public class MicrophoneRecorder extends EventDispatcher {
     public static var SOUND_COMPLETE:String = "sound_complete";
     public static var PLAYBACK_STARTED:String = "playback_started";
     public static var ACTIVITY:String = "activity";
+    public static var ENCODE_BEGIN:String = "encode_begin";
+    public static var ENCODE_COMPLETE:String = "encode_complete";
 
     public var mic:MicrophoneWrapper;
     public var sound:Sound = new Sound();
@@ -34,8 +42,17 @@ package flashwavrecorder {
     public var playBackStartedAt:Number;
     public var playBackLatency:Number;
     private var resampledBytes:ByteArray = new ByteArray();
+    private var _oggManager:OggManager;
 
     public function MicrophoneRecorder() {
+      MonsterDebugger.trace(this, "Init of the MicrophoneRecorder.");
+      _oggManager = new OggManager();
+      //Ogg Manager Events
+      _oggManager.addEventListener(OggManagerEvent.ENCODE_BEGIN, handleOggEncodeBegin);
+      //_oggManager.addEventListener(OggManagerEvent.ENCODE_PROGRESS, handleOggEncodeProgress, false, 0, true);
+      _oggManager.addEventListener(OggManagerEvent.ENCODE_COMPLETE, handleOggEncodeComplete);
+      //_oggManager.addEventListener(OggManagerEvent.ENCODE_CANCEL, handleOggEncodeCancel, false, 0, true);
+
       this.mic = new MicrophoneWrapper();
       this.sound.addEventListener(SampleDataEvent.SAMPLE_DATA, playbackSampleHandler);
       var sampleCalc:SampleCalculator = new SampleCalculator();
@@ -56,6 +73,7 @@ package flashwavrecorder {
     }
 
     public function record(name:String, filename:String=""):void {
+      MonsterDebugger.trace(this, "Recording...");
       this.stop();
       this.currentSoundName = name;
       this.currentSoundFilename = filename;
@@ -111,6 +129,8 @@ package flashwavrecorder {
         this.mic.removeEventListener(SampleDataEvent.SAMPLE_DATA, micSampleDataHandler);
         this.mic.removeEventListener(ActivityEvent.ACTIVITY, onMicrophoneActivity);
         this.recording = false;
+        MonsterDebugger.trace(this, "Ogg conversion called.");
+        _oggManager.encode(this.getSoundBytes(name));//MicrophoneRecorder.convertToWav(this.getSoundBytes(name), MicrophoneRecorder.frequency(this.rates[name]))
       }
     }
 
@@ -294,8 +314,29 @@ package flashwavrecorder {
       return 0;
     }
 
-    public function convertToWav(name:String):ByteArray {
-      return MicrophoneRecorder.convertToWav(this.getSoundBytes(name), MicrophoneRecorder.frequency(this.rates[name]));
+    public function convertToOgg(name:String):void {
+
+    }
+
+    public function handleOggEncodeBegin(e:OggManagerEvent):void {
+      MonsterDebugger.trace(this, "Ogg conversion started.");
+      dispatchEvent(new Event(MicrophoneRecorder.ENCODE_BEGIN));
+    }
+
+    public function handleOggEncodeComplete(e:OggManagerEvent):void {
+      MonsterDebugger.trace(this, "Ogg conversion completed.");
+      if (_oggManager.encodedBytes && _oggManager.encodedBytes.length > 0) {
+        dispatchEvent(new Event(MicrophoneRecorder.ENCODE_COMPLETE));
+      }
+    }
+
+    public function getEncodedBytes():ByteArray {
+      MonsterDebugger.trace(this, "encodedBytes: " + _oggManager.encodedBytes.length);
+      return _oggManager.encodedBytes;
+    }
+
+    public function convertToWav(name:String):void {
+      MicrophoneRecorder.convertToWav(this.getSoundBytes(name), MicrophoneRecorder.frequency(this.rates[name]));
     }
 
     public static function convertToWav(soundBytes:ByteArray, sampleRate:int):ByteArray {

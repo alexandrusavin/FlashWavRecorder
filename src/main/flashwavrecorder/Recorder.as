@@ -13,6 +13,7 @@ package flashwavrecorder {
   import flash.text.engine.TextBlock;
   import flash.text.engine.TextElement;
   import flash.text.engine.TextLine;
+  import com.demonsters.debugger.MonsterDebugger;
 
   public class Recorder extends Sprite {
 
@@ -20,12 +21,19 @@ package flashwavrecorder {
     public var saveButton:InteractiveObject;
 
     public function Recorder() {
+      MonsterDebugger.initialize(this);
+      MonsterDebugger.trace(this, "App initialized.");
       this.stage.align = StageAlign.TOP_LEFT;
       this.stage.scaleMode = StageScaleMode.NO_SCALE;
-      recorderInterface = new RecorderJSInterface();
+      try {
+        recorderInterface = new RecorderJSInterface();
+        MonsterDebugger.trace(this, recorderInterface);
+      } catch (e:Error) {
+        MonsterDebugger.trace(this, e);
+      }
 
       if(this.root.loaderInfo.parameters["event_handler"]) {
-	recorderInterface.eventHandler = this.root.loaderInfo.parameters["event_handler"];
+        recorderInterface.eventHandler = this.root.loaderInfo.parameters["event_handler"];
       }
 
       var url:String = this.root.loaderInfo.parameters["upload_image"];
@@ -49,6 +57,7 @@ package flashwavrecorder {
     }
 
     public function save():void {
+      MonsterDebugger.trace(this, "Save button pressed!");
       recorderInterface.save();
     }
 
@@ -114,5 +123,4 @@ package flashwavrecorder {
       ready();
     }
   }
-
 }

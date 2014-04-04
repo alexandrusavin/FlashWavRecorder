@@ -10,6 +10,7 @@ package flashwavrecorder {
   import flash.media.Microphone;
   import flash.net.URLLoader;
   import flash.net.URLRequest;
+  import com.demonsters.debugger.MonsterDebugger;
 
   public class RecorderJSInterface {
 
@@ -22,6 +23,9 @@ package flashwavrecorder {
     public static var MICROPHONE_ACTIVITY:String = "microphone_activity";
     public static var MICROPHONE_LEVEL:String = "microphone_level";
     public static var MICROPHONE_SAMPLES:String = "microphone_samples";
+
+    public static var ENCODE_BEGIN:String = "encode_begin";
+    public static var ENCODE_COMPLETE:String = "encode_complete";
 
     public static var RECORDING:String = "recording";
     public static var RECORDING_STOPPED:String = "recording_stopped";
@@ -49,8 +53,11 @@ package flashwavrecorder {
     public var saveButton:DisplayObject;
 
     public function RecorderJSInterface() {
+      MonsterDebugger.trace(this, "Init of the ExternalInterface.");
       this.recorder = new MicrophoneRecorder();
+      
       if(ExternalInterface.available && ExternalInterface.objectID) {
+        MonsterDebugger.trace(this, "Adding JS callbacks.");
         ExternalInterface.addCallback("record", record);
         ExternalInterface.addCallback("observeLevel", observeLevel);
         ExternalInterface.addCallback("stopObservingLevel", stopObservingLevel);
@@ -72,15 +79,19 @@ package flashwavrecorder {
         ExternalInterface.addCallback("setLoopBack", setLoopBack);
         ExternalInterface.addCallback("getMicrophone", getMicrophone);
       }
+      MonsterDebugger.trace(this, "Adding event listners.");
       this.recorder.addEventListener(MicrophoneRecorder.SOUND_COMPLETE, playComplete);
       this.recorder.addEventListener(MicrophoneRecorder.PLAYBACK_STARTED, playbackStarted);
       this.recorder.addEventListener(MicrophoneRecorder.ACTIVITY, microphoneActivity);
+      this.recorder.addEventListener(MicrophoneRecorder.ENCODE_BEGIN, encodeStared);
+      this.recorder.addEventListener(MicrophoneRecorder.ENCODE_COMPLETE, encodeComplete);
       this.recorder.levelForwarder.addEventListener(MicrophoneLevelEvent.LEVEL_VALUE, microphoneLevel);
       this.recorder.samplesForwarder.addEventListener(MicrophoneSamplesEvent.RAW_SAMPLES_DATA, microphoneSamples);
     }
 
     public function ready(width:int, height:int):void {
       ExternalInterface.call(this.eventHandler, RecorderJSInterface.READY, width, height);
+      MonsterDebugger.trace(this, "Ready callback called.");
       if (!this.recorder.mic.isMuted()) {
         onMicrophoneStatus(new StatusEvent(StatusEvent.STATUS, false, false, "Microphone.Unmuted", "status"));
       }
@@ -109,6 +120,14 @@ package flashwavrecorder {
       ExternalInterface.call(this.eventHandler, RecorderJSInterface.MICROPHONE_ACTIVITY, this.recorder.mic.getActivityLevel());
     }
 
+    private function encodeStared(event:Event):void {
+      ExternalInterface.call(this.eventHandler, RecorderJSInterface.ENCODE_BEGIN);
+    }
+
+    private function encodeComplete(event:Event):void {
+      ExternalInterface.call(this.eventHandler, RecorderJSInterface.ENCODE_COMPLETE);
+    }
+
     private function microphoneLevel(event:MicrophoneLevelEvent):void {
       ExternalInterface.call(this.eventHandler, RecorderJSInterface.MICROPHONE_LEVEL, event.levelValue);
     }
@@ -118,6 +137,7 @@ package flashwavrecorder {
     }
 
     public function init(url:String=null, fieldName:String=null, formData:Array=null):void {
+      MonsterDebugger.trace(this, "uploadUrl: " + url);
       this.uploadUrl = url;
       this.uploadFieldName = fieldName;
       this.update(formData);
@@ -131,6 +151,7 @@ package flashwavrecorder {
           this.uploadFormData.push(MultiPartFormUtil.nameValuePair(data.name, data.value));
         }
       }
+       MonsterDebugger.trace(this, this);
     }
 
     public function isMicrophoneAvailable():Boolean {
@@ -279,6 +300,9 @@ package flashwavrecorder {
         _save(this.recorder.currentSoundName, this.recorder.currentSoundFilename);
         ExternalInterface.call(this.eventHandler, RecorderJSInterface.SAVING, this.recorder.currentSoundName);
       } catch(e:Error) {
+        MonsterDebugger.trace(this, e);
+        MonsterDebugger.trace(this, this.recorder.currentSoundName);
+        MonsterDebugger.trace(this, this.recorder.currentSoundFilename);
         ExternalInterface.call(this.eventHandler, RecorderJSInterface.SAVE_FAILED, this.recorder.currentSoundName, e.message);
         return false;
       }
@@ -303,21 +327,29 @@ package flashwavrecorder {
     }
 
     private function _save(name:String, filename:String):void {
-
+      MonsterDebugger.trace(this, "Uploading...");
       var boundary:String = MultiPartFormUtil.boundary();
 
-      this.uploadFormData.push( MultiPartFormUtil.fileField(this.uploadFieldName, recorder.convertToWav(name), filename, "audio/x-wav") );
+      try {
+      this.uploadFormData.push( MultiPartFormUtil.fileField(this.uploadFieldName, this.recorder.getEncodedBytes(), filename, "audio/ogg") );
       var request:URLRequest = MultiPartFormUtil.request(this.uploadFormData);
       this.uploadFormData.pop();
-
+      } catch (e:Error) {
+        MonsterDebugger.trace(this, e);
+      }
       request.url = this.uploadUrl;
+      MonsterDebugger.trace(this, request);
 
       var loader:URLLoader = new URLLoader();
       loader.addEventListener(Event.COMPLETE, onSaveComplete);
       loader.addEventListener(IOErrorEvent.IO_ERROR, onIOError);
       loader.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
       loader.addEventListener(ProgressEvent.PROGRESS, onProgress);
-      loader.load(request);
+      try {
+        loader.load(request);
+      } catch (e:Error) {
+        MonsterDebugger.trace(this, e);
+      }
     }
 
     private function onSaveComplete(event:Event):void {
@@ -326,6 +358,7 @@ package flashwavrecorder {
     }
 
     private function onIOError(event:Event):void {
+      MonsterDebugger.trace(this, IOErrorEvent(event));
       ExternalInterface.call(this.eventHandler, RecorderJSInterface.SAVE_FAILED, this.recorder.currentSoundName, IOErrorEvent(event).text);
     }
 
